@@ -1,0 +1,84 @@
+#include <DHTesp.h>
+#include <LiquidCrystal_I2C.h>
+#include "WiFi.h"
+#include "HTTPClient.h"
+
+const char* ssid = "Wokwi-GUEST";
+const char* password = "";
+
+#define I2C_ADDR    0x27
+#define LCD_COLUMNS 16
+#define LCD_LINES   2
+
+LiquidCrystal_I2C lcd(I2C_ADDR, LCD_COLUMNS, LCD_LINES);
+
+DHTesp dhtSensor;
+
+int ledOrange = 19;
+int ledBlue = 23;
+
+void setup() {
+  Serial.begin(115200);
+  WiFi.begin(ssid, password);
+  while (WiFi.status() != WL_CONNECTED)
+  {
+    delay(500);
+    Serial.println("Conectando...");
+  }
+  Serial.println("Conectado no WiFi");
+
+  dhtSensor.setup(13, DHTesp::DHT22);
+  pinMode(22, OUTPUT);
+  pinMode(23, OUTPUT);
+  pinMode(19, OUTPUT);
+  pinMode(21, OUTPUT);
+  lcd.init();
+  lcd.backlight();
+}
+void loop()
+{
+  HTTPClient http;
+
+  float temperatura = dhtSensor.getTemperature();
+  float umidade = dhtSensor.getHumidity();
+  delay(100);
+
+  lcd.setCursor(0, 0);
+  lcd.print("temp. :" + String(temperatura) + "C");
+  lcd.setCursor(0, 1);
+  lcd.print("Umidade:" + String(umidade) + "%");
+
+  if (temperatura > 35)
+  {
+    digitalWrite(ledOrange, HIGH);
+  }
+  else
+  {
+    digitalWrite(ledOrange, LOW);
+  }
+  if (umidade > 70)
+  {
+    digitalWrite(ledBlue, HIGH);
+  }
+  else
+  {
+    digitalWrite(ledBlue, LOW);
+  }
+
+  String url = "https://api.thingspeak.com/update?api_key=R7YD76JB3QPC97N6&field1=";
+  url += String(temperatura);
+  url += "&field2=";
+  url += String(umidade);
+  http.begin(url);
+
+  int httpCode = http.GET();
+
+  if (httpCode > 0)
+  {
+    Serial.println("Dados enviados com sucesso");
+  }
+  else
+  {
+    Serial.println("Erro no envio de dados!");
+  }
+}
