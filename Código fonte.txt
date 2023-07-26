@@ -1,10 +1,19 @@
 #include <DHTesp.h>
 #include <LiquidCrystal_I2C.h>
+#include <PubSubClient.h>
 #include "WiFi.h"
 #include "HTTPClient.h"
 
 const char* ssid = "Wokwi-GUEST";
 const char* password = "";
+
+const char* broker = "broker.hivemq.com";
+const char* topic = "senai147258369";
+const short port = 1883;
+String frase = "";
+
+WiFiClient wifiClient;
+PubSubClient mqttClient(wifiClient); 
 
 #define I2C_ADDR    0x27
 #define LCD_COLUMNS 16
@@ -17,15 +26,32 @@ DHTesp dhtSensor;
 int ledOrange = 19;
 int ledBlue = 23;
 
-void setup() {
+void setup()
+{
   Serial.begin(115200);
+
+  //WIFI
+
   WiFi.begin(ssid, password);
   while (WiFi.status() != WL_CONNECTED)
   {
     delay(500);
-    Serial.println("Conectando...");
+    Serial.println("Conectando WiFi ...");
   }
   Serial.println("Conectado no WiFi");
+
+  //MQTT
+
+  mqttClient.setServer(broker, port);
+  while(!mqttClient.connected())
+  {
+    Serial.println("Conectando ao broker ...");
+    String clientID = "ESPCLIENT-";
+    clientID = clientID + String(random(0xffff), HEX);
+    mqttClient.connect(clientID.c_str()); 
+  }
+  Serial.println("Conectado ao broker");
+
 
   dhtSensor.setup(13, DHTesp::DHT22);
   pinMode(22, OUTPUT);
@@ -35,16 +61,19 @@ void setup() {
   lcd.init();
   lcd.backlight();
 }
+
 void loop()
 {
+  delay(1000);
+
   HTTPClient http;
 
   float temperatura = dhtSensor.getTemperature();
   float umidade = dhtSensor.getHumidity();
-  delay(100);
+  delay(1000);
 
   lcd.setCursor(0, 0);
-  lcd.print("temp. :" + String(temperatura) + "C");
+  lcd.print("Temp. :" + String(temperatura) + "C°");
   lcd.setCursor(0, 1);
   lcd.print("Umidade:" + String(umidade) + "%");
 
@@ -70,15 +99,12 @@ void loop()
   url += "&field2=";
   url += String(umidade);
   http.begin(url);
+  Serial.println("Dados enviados.");
+  Serial.println("...");
 
-  int httpCode = http.GET();
-
-  if (httpCode > 0)
-  {
-    Serial.println("Dados enviados com sucesso");
-  }
-  else
-  {
-    Serial.println("Erro no envio de dados!");
-  }
+  frase = "{ \"temperatura\" : " + String(temperatura) + ", \"umidade\" : " + String(umidade) + " }";
+  mqttClient.publish(topic, frase.c_str());
+  Serial.println("Dados enviados.");
+  Serial.println("...");
+  delay(1000);
 }
